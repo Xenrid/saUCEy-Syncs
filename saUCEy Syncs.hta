@@ -1,0 +1,445 @@
+<!-- Copyright Luke Huffman, 2021 -->
+<HTML>
+<HEAD><TITLE>saUCEy Syncs</TITLE>
+<STYLE>
+
+<HTA:APPLICATION 
+     ID=”objsaUCEySyncs”
+     APPLICATIONNAME=”saUCEy Syncs<”
+     SCROLL=”yes”
+     SINGLEINSTANCE=”yes”
+>
+</STYLE>
+</HEAD>
+
+<SCRIPT LANGUAGE = VBScript> 
+<!--
+Dim Status
+Status = False
+
+Function GetFolder(TB,LB) 'prompt user to select folder and output path & uce file names to appropriate textbox and listbox
+	Dim sUCE
+	Dim sCOX
+	Dim oFSO
+	Dim oSA
+	Dim oFolderSA
+	Dim oFolderFSO
+	
+	Set oFSO = CreateObject("Scripting.FileSystemObject")
+	Set oSA = CreateObject("Shell.Application")
+	Set oFolderSA = oSA.BrowseForFolder(0, "Choose a folder", 0)
+	
+	If (Not oFolderSA Is Nothing) Then 'clear the listbox
+		For Each oOption in LB.Options
+			oOption.RemoveNode
+		Next
+	
+		sUCE = oFolderSA.Items.Item.path 'selected folder path string
+		sCOX = Mid(sUCE, 1, InStrRev(sUCE, "\")) & "cox" 'extrapolated cox folder path string
+		
+		If oFSO.FolderExists(sCOX) Then 'check if extrapolated cox folder exists
+			TB.VALUE = sUCE 'put the selected folder path string in the textbox
+			Set oFolderFSO = oFSO.GetFolder(sUCE) 'get the selected folder
+			
+			For Each file in oFolderFSO.Files 'add each uce file in the selected folder to the listbox
+				If Right(UCase(file.Name), 4) = ".UCE" Then 
+					Set oOption = Document.createElement("OPTION")
+					oOption.Text = file.Name
+					oOption.Value = file.Name
+					LB.Add(oOption)
+				End If
+			next
+		Else 'ask user if they want to create the missing cox folder
+			a = MsgBox(Chr(34) & sCOX & Chr(34) & " was not found. Would you like to create it?", vbQuestion + vbYesNo + vbDefaultButton2, "Create new cox folder?")
+			If a = vbYes Then
+				oFSO.CreateFolder(sCOX) 'create the cox folder
+				TB.VALUE = sUCE 'put the selected folder path string in the textbox
+				Set oFolderFSO = oFSO.GetFolder(sUCE) 'get the selected folder
+				
+				For Each file in oFolderFSO.Files 'add each uce file in the selected folder to the listbox
+					If Right(UCase(file.Name), 4) = ".UCE" Then 
+						Set oOption = Document.createElement("OPTION")
+						oOption.Text = file.Name
+						oOption.Value = file.Name
+						LB.Add(oOption)
+					End If
+				next
+			End If
+		End If
+	End If
+	
+	Set oFolderSA = Nothing
+	Set oFolderFSO = Nothing
+	Set oSA = Nothing
+	Set oFSO = Nothing
+End Function
+
+Sub Window_Onload() 
+    Center_HTA 700, 700
+End Sub
+  
+Sub Center_HTA(intWidth, intHeight) 'center the hta window
+	x = (window.screen.width - intWidth) / 2
+	y = (window.screen.height - intHeight) / 2
+	If x < 0 Then x = 0
+	If y < 0 Then y = 0
+	window.resizeTo intWidth,intHeight
+	window.moveTo x,y
+End Sub
+
+Sub btnSRC_OnClick
+	Call GetFolder(Document.SyncForm.tbSRC,Document.SyncForm.lbSRC)
+End Sub 
+
+Sub btnDST_OnClick
+	Call GetFolder(Document.SyncForm.tbDST,Document.SyncForm.lbDST)
+End Sub 
+
+Sub tbPLST_OnClick
+	If Document.SyncForm.tbPLST.Value = "playlist name" then 
+		Document.SyncForm.tbPLST.Value = ""
+	End If
+End Sub 
+
+Sub btnALL_OnClick 'select all uce file names in the source list
+	Dim oOption
+	With CreateObject("Scripting.Dictionary")
+		for Each oOption in Document.SyncForm.lbSRC.Options
+			oOption.Selected = True
+		Next
+	End With
+End Sub 
+
+Sub btnCLR_OnClick 'clear all selections in the source list
+	Dim oOption
+	With CreateObject("Scripting.Dictionary")
+		for Each oOption in Document.SyncForm.lbSRC.Options
+			oOption.Selected = False
+		Next
+	End With
+End Sub 
+
+Sub btnADD_OnClick 'copy slected source uce files and related cox files to the destination folder & destination cox folder
+	Dim sSubPath
+	Dim oOption
+	Dim oFolder
+	Dim sName
+	Dim sCOXs
+	Dim sCOXd
+	Dim oFSO
+	Dim oSA
+	
+	Set oFSO = CreateObject("Scripting.FileSystemObject")
+	Set oSA = CreateObject("Shell.Application")
+	
+	If Document.SyncForm.tbSRC.Value <> "" Then
+		If Document.SyncForm.tbDST.Value <> "" Then
+			sCOXs = Mid(Document.SyncForm.tbSRC.Value, 1, InStrRev(Document.SyncForm.tbSRC.Value, "\")) & "cox" 'source cox folder path string
+			sCOXd = Mid(Document.SyncForm.tbDST.Value, 1, InStrRev(Document.SyncForm.tbDST.Value, "\")) & "cox" 'destination cox folder path string
+			Set oFolder = oFSO.GetFolder(sCOXs) 'set source cox folder
+			
+			With CreateObject("Scripting.Dictionary")
+				For Each oOption in Document.SyncForm.lbSRC.Options 'parse through source listbox uce file names
+					If oOption.Selected = True Then 'check if source uce file name is selected
+						sName = Mid(oOption.Text, 1, Len(oOption.Text) - 3) 'uce file name string minus file extension
+						On Error Resume Next 'prevents error if not overwriting existing files 
+							oFSO.CopyFile Document.SyncForm.tbSRC.Value & "\" & oOption.Text, Document.SyncForm.tbDST.Value & "\", Document.SyncForm.cbOverwrite.Checked 'copy uce file
+						On Error Goto 0	'restores default error handling
+						for each SubFolder in oFolder.SubFolders 'parse through each subfolder under the source cox folder
+							For each file in SubFolder.Files 'parse through each file in each source cox folder
+								If InStr(file.Name, sName) = 1 Then 'check for files with name matching the source uce
+									sSubPath = Mid(file.Path, InStr(UCase(file.Path), "\COX\") + 4, InStrRev(file.Path, "\") - InStr(UCase(file.Path), "\COX\") - 3)
+									If Not oFSO.FolderExists(sCOXd & "\" & sSubPath) Then 'check if cox subfolder exists
+										oFSO.CreateFolder(sCOXd & "\" & sSubPath) 'create cox subfolder if it doesn't exist
+									End If
+									On Error Resume Next 'prevents error if not overwriting existing files
+										oFSO.CopyFile file.Path, sCOXd & "\" & sSubPath, Document.SyncForm.cbOverwrite.Checked 'copy cox file
+									On Error Goto 0 'restores default error handling
+								End If 
+							next
+						next
+					End If
+				Next
+				For Each oOption in Document.SyncForm.lbDST.Options 'clear the destination listbox
+					oOption.RemoveNode
+				Next
+				Set oFolder = oFSO.GetFolder(Document.SyncForm.tbDST.Value)
+				For Each file in oFolder.Files 'refill the destination listbox
+					If Right(UCase(file.Name), 4) = ".UCE" Then 
+						Set oOption = Document.createElement("OPTION")
+						oOption.Text = file.Name
+						oOption.Value = file.Name
+						Document.SyncForm.lbDST.Add(oOption)
+					End If
+				next
+			End With
+		Else
+			MsgBox "Please select a valid destination folder."
+		End If	
+	Else
+		MsgBox "Please select a valid source folder."
+	End If
+
+	Set oFolder = Nothing
+	Set oOption = Nothing
+	Set oSA = Nothing
+	Set oFSO = Nothing
+End Sub  
+
+Sub btnSYNC_OnClick 'copy cox files from the source cox directory with names matching destination listbox uce files
+	Dim sSubPath
+	Dim oOption
+	Dim oFolder
+	Dim sName
+	Dim sCOX
+	Dim sCOXd
+	Dim oFSO
+	Dim oSA
+	
+	Set oFSO = CreateObject("Scripting.FileSystemObject")
+	Set oSA = CreatewObject("Shell.Application")
+
+	If Document.SyncForm.tbSRC.Value <> "" Then
+		If Document.SyncForm.tbDST.Value <> "" Then
+			sCOXs = Mid(Document.SyncForm.tbSRC.Value, 1, InStrRev(Document.SyncForm.tbSRC.Value, "\")) & "cox" 'source cox folder path string
+			sCOXd = Mid(Document.SyncForm.tbDST.Value, 1, InStrRev(Document.SyncForm.tbDST.Value, "\")) & "cox" 'destination cox folder path string
+			Set oFolder = oFSO.GetFolder(sCOXs) 'set source cox folder
+			
+			With CreateObject("Scripting.Dictionary")
+				for Each oOption in Document.SyncForm.lbDST.Options 'parse through destination listbox uce file names
+					sName = Mid(oOption.Text, 1, Len(oOption.Text) - 3) 'uce file name string minus file extension
+					for each SubFolder in oFolder.SubFolders 'parse through each subfolder under the source cox folder
+						For each file in SubFolder.Files 'parse through each file in each source cox folder
+							If InStr(file.Name, sName) = 1 Then 'check for files with name matching the destination uce
+								sSubPath = Mid(file.Path, InStr(UCase(file.Path), "\COX\") + 4, InStrRev(file.Path, "\") - InStr(UCase(file.Path), "\COX\") - 3) 'extrapolated destination cox subfolder string
+								If Not oFSO.FolderExists(sCOXd & "\" & sSubPath) Then 'check if cox subfolder exists
+									oFSO.CreateFolder(sCOXd & "\" & sSubPath) 'create cox subfolder if it doesn't exist
+								End If
+								On Error Resume Next 'prevents error if not overwriting existing files
+									oFSO.CopyFile file.Path, sCOXd & "\" & sSubPath, Document.SyncForm.cbOverwrite.Checked 'copy cox file
+								On Error Goto 0 'restores default error handling
+							End If 
+						next
+					next
+				Next
+			End With
+		Else
+			MsgBox "Please select a valid destination  folder."
+		End If	
+	Else
+		MsgBox "Please select a valid source folder."
+	End If
+	
+	Set oFolder = Nothing
+	Set oOption = Nothing
+	Set oSA = Nothing
+	Set oFSO = Nothing
+End Sub  
+
+Sub btnREN_OnClick 'rename destination uce and related cox files
+	Dim sSubPath
+	Dim oOption
+	Dim oFolder
+	Dim sName
+	Dim sNew
+	Dim sPath
+	Dim sEXT
+	Dim sCOXd
+	Dim oFSO
+	Dim oSA
+	
+	Set oFSO = CreateObject("Scripting.FileSystemObject")
+	Set oSA = CreateObject("Shell.Application")
+
+	If Document.SyncForm.tbDST.Value <> "" Then
+		sCOXd = Mid(Document.SyncForm.tbDST.Value, 1, InStrRev(Document.SyncForm.tbDST.Value, "\")) & "cox" 'destination cox folder path string
+		Set oFolder = oFSO.GetFolder(sCOXd) 'set destination cox folder
+		
+		With CreateObject("Scripting.Dictionary")
+			for Each oOption in Document.SyncForm.lbDST.Options 'parse through destination listbox uce file names
+				If oOption.Selected = True Then 'check if destination uce file name is selected
+					sName = Mid(oOption.Text, 1, Len(oOption.Text) - 3) 'uce file name string minus file extension
+					sNew = InputBox("Enter a new name.", "Rename", Mid(sName, 1, Len(sName) - 1)) 'prompt user for new name
+					If sNew <> Mid(sName, 1, Len(sName) - 1) and Trim(sNew) <> "" Then
+						oFSO.MoveFile Document.SyncForm.tbDST.Value & "\" & oOption.Text, Document.SyncForm.tbDST.Value & "\" & sNew & ".UCE" 'rename uce file with new name
+						for each SubFolder in oFolder.SubFolders 'parse through each subfolder under destination cox folder
+							For each file in SubFolder.Files 'parse through each file in each destination cox folder
+								If InStr(file.Name, sName) = 1 Then 'check for files with name matching the destination uce
+									sPath = Mid(file.path, 1, InStrRev(file.path, sName) - 1) 'cox file path string
+									sEXT = Mid(file.path, InStrRev(file.path, ".")) 'cox file extension string
+									oFSO.MoveFile file.Path, sPath & sNew & sEXT 'rename cox file with new name
+								End If 
+							next
+						next
+					End If
+				End If
+			Next
+			For Each oOption in Document.SyncForm.lbDST.Options 'clear the destination listbox
+				oOption.RemoveNode
+			Next
+			Set oFolder = oFSO.GetFolder(Document.SyncForm.tbDST.Value)
+			For Each file in oFolder.Files 'refill the destination listbox
+				If Right(UCase(file.Name), 4) = ".UCE" Then 
+					Set oOption = Document.createElement("OPTION")
+					oOption.Text = file.Name
+					oOption.Value = file.Name
+					Document.SyncForm.lbDST.Add(oOption)
+				End If
+			next
+		End With
+	Else
+		MsgBox "Please select a valid destination  folder."
+	End If	
+
+	Set oFolder = Nothing
+	Set oOption = Nothing
+	Set oSA = Nothing
+	Set oFSO = Nothing	
+End Sub  
+
+Sub btnPLST_OnClick 'create a playlist containing everything in the destination listbox
+	Dim sSubPath
+	Dim oOption
+	Dim sName
+	Dim sDEF
+	Dim sPLST
+	Dim sCOXd
+	Dim oFSO
+	Dim oPLST
+	
+	Set oFSO = CreateObject("Scripting.FileSystemObject")
+
+	If Document.SyncForm.tbDST.Value <> "" Then
+		sCOXd = Mid(Document.SyncForm.tbDST.Value, 1, InStrRev(Document.SyncForm.tbDST.Value, "\")) & "cox" 'destination cox folder path string
+		sDEF = Mid(Document.SyncForm.tbDST.Value, InStrRev(Document.SyncForm.tbDST.Value, "\") + 1) 'uce folder name string
+		sPLST = InputBox("Enter playlist name.", "Create Playlist", sDEF) 'prompt user for playlist name string
+		If Trim(sPLST) <> "" Then
+			If Not oFSO.FolderExists(sCOXd & "\playlists") Then 'check if playlists subfolder exists in cox directory
+				oFSO.CreateFolder(sCOXd & "\playlists") 'create playlists subfolder if it doesn't exist
+			End If
+		
+			If InStr(UCase(sPLST), ".TXT") Then 'add .txt file extension if it isn't present and create file path string
+				sSubPath = sCOXd & "\playlists\" & sPLST
+			Else
+				sSubPath = sCOXd & "\playlists\" & sPLST & ".txt"
+			End If
+		
+			Set oPLST = oFSO.CreateTextFile(sSubPath, True) 'create the playlist text file
+			
+			With CreateObject("Scripting.Dictionary")
+				for Each oOption in Document.SyncForm.lbDST.Options 'parse through destination listbox uce file names
+					sName = Mid(oOption.Text, 1, Len(oOption.Text) - 4) 'uce file name string minus "." & file extension
+					oPLST.WriteLine sName 'write each trimmed uce file name string to the playlist text file
+				Next
+			End With
+		Else
+			MsgBox "Please specify a playlist name."
+		End If	
+	Else
+		MsgBox "Please select a valid destination  folder."
+	End If
+	
+	Set oOption = Nothing
+	Set oSA = Nothing
+	Set oFSO = Nothing	
+End Sub 
+
+Sub btnDEL_OnClick 'delete selected destination uce files and their related cox files 
+	Dim sSubPath
+	Dim oOption
+	Dim oFolder
+	Dim sName
+	Dim sCOXd
+	Dim oFSO
+	Dim oSA
+	
+	Set oFSO = CreateObject("Scripting.FileSystemObject")
+	Set oSA = CreateObject("Shell.Application")
+
+	If Document.SyncForm.tbDST.Value <> "" Then
+		sCOXd = Mid(Document.SyncForm.tbDST.Value, 1, InStrRev(Document.SyncForm.tbDST.Value, "\")) & "cox" 'destination cox folder path string
+		Set oFolder = oFSO.GetFolder(sCOXd) 'set destination cox folder
+		
+		With CreateObject("Scripting.Dictionary")
+			for Each oOption in Document.SyncForm.lbDST.Options 'parse through destination listbox uce file names
+				If oOption.Selected = True Then 'check if destination uce file name is selected
+					sName = Mid(oOption.Text, 1, Len(oOption.Text) - 3) 'uce file name string minus file extension
+					oFSO.DeleteFile Document.SyncForm.tbDST.Value & "\" & oOption.Text 'delete destination uce file
+					for each SubFolder in oFolder.SubFolders 'parse through each subfolder under destination cox folder
+						For each file in SubFolder.Files 'parse through each file in each destination cox folder
+							If InStr(file.Name, sName) = 1 Then 'check for files with name matching the destination uce
+								oFSO.DeleteFile file.Path 'delete cox files with names matching selected destination uce
+							End If 
+						next
+					next
+				End If
+			Next
+			For Each oOption in Document.SyncForm.lbDST.Options 'clear the destination listbox
+				oOption.RemoveNode
+			Next
+			Set oFolder = oFSO.GetFolder(Document.SyncForm.tbDST.Value)
+			For Each file in oFolder.Files 'refill the destination listbox
+				If Right(UCase(file.Name), 4) = ".UCE" Then 
+					Set oOption = Document.createElement("OPTION")
+					oOption.Text = file.Name
+					oOption.Value = file.Name
+					Document.SyncForm.lbDST.Add(oOption)
+				End If
+			next
+		End With
+	Else
+		MsgBox "Please select a valid destination  folder."
+	End If	
+
+	Set oFolder = Nothing
+	Set oOption = Nothing
+	Set oSA = Nothing
+	Set oFSO = Nothing	
+End Sub  
+
+-->
+</SCRIPT>
+
+<BODY>
+	<FORM NAME="SyncForm">
+		<table style="width:100%">
+			<tr>
+				<td style="text-align: left; width:49%; display: inline-block;">
+					<b>SOURCE:</b>
+				</td>
+				<td style="text-align: right; width:50%;  display: inline-block;">
+					<label>overwrite existing files</label><input type="checkbox" id="cbOverwrite" name="cbOverwrite" checked="checked">
+				</td>
+			</tr>
+		</table>
+		<table style="width:100%; height:84%">
+			<tr>
+				<INPUT style="width:90%"; NAME="tbSRC" id="tbSRC" TYPE="TEXT" READONLY="READONLY"> <INPUT style="width:9%"; NAME="btnSRC" TYPE="BUTTON" VALUE="Get"><br>
+				<b>DESTINATION:</b><br>
+				<INPUT style="width:90%"; NAME="tbDST" id="tbDST" TYPE="TEXT" READONLY="READONLY"> <INPUT style="width:9%"; NAME="btnDST" TYPE="BUTTON" VALUE="Get"><br>
+			</tr>
+			<tr>
+				<td style="vertical-align:top; border-width:1px; border-color:Black; border-style:groove; width:45%">
+					<b>SOURCE UCE FILES</b> <br>
+					<select style="width:100%; height:84%"; name="lbSRC" multiple="multiple">
+					</select>
+					<INPUT style="width:100%; height:6%"; NAME="btnALL" TYPE="BUTTON" VALUE="Select all source UCE files">
+					<INPUT style="width:100%; height:6%"; NAME="btnCLR" TYPE="BUTTON" VALUE="Clear selection">
+				</td>
+				<td style="vertical-align:center ;"width="10%">
+					<INPUT style="width:100%"; NAME="btnADD" TYPE="BUTTON" VALUE="-->">
+				</td>
+				<td style="vertical-align:top; border-width:1px; border-color:Black; border-style:groove; width:45%">
+					<b>DESTINATION UCE FILES</b> <br>
+					<select style="width:100%; height:84%"; name="lbDST" multiple="multiple">
+					</select>
+					<INPUT style="width:100%; height:6%"; NAME="btnSYNC" TYPE="BUTTON" VALUE="Pull COX files from source">
+					<INPUT style="width:32.4%; height:6%"; NAME="btnREN" TYPE="BUTTON" VALUE="Rename">
+					<INPUT style="width:32.4%; height:6%"; NAME="btnPLST" TYPE="BUTTON" VALUE="Playlist">
+					<INPUT style="width:32.4%; height:6%"; NAME="btnDEL" TYPE="BUTTON" VALUE="Delete">
+				</td>
+			</tr>
+		</table>
+	</FORM>
+</BODY>
+</HTML>
