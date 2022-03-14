@@ -197,7 +197,7 @@ Sub btnSYNC_OnClick 'copy cox files from the source cox directory with names mat
 	Dim oSA
 	
 	Set oFSO = CreateObject("Scripting.FileSystemObject")
-	Set oSA = CreatewObject("Shell.Application")
+	Set oSA = CreateObject("Shell.Application")
 
 	If Document.SyncForm.tbSRC.Value <> "" Then
 		If Document.SyncForm.tbDST.Value <> "" Then
